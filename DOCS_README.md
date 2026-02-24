@@ -87,6 +87,5 @@ Configurable color system using CSS custom properties with example themes:
 
 ---
 
-**Location:** `/Users/pujan/Developer/Laravel/Ai`
 **Framework:** Laravel 12.49.0
 **PHP Version:** 8.3+

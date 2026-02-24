@@ -7,7 +7,8 @@ MCP (Model Context Protocol) server for providing Laravel AI documentation to Cl
 ### 1. Install Dependencies
 
 ```bash
-cd /Users/pujan/Developer/Laravel/Ai
+# Clone or navigate to the project directory
+cd laravel-ai
 npm install
 ```
 
@@ -17,7 +18,7 @@ npm install
 npm start
 ```
 
-Documentation is expected to be in: `/Users/pujan/Developer/Laravel/Ai/docs`
+Documentation is expected to be in: `./docs` (relative to project root)
 
 ## ⚙️ Claude Code Configuration
 
@@ -28,7 +29,7 @@ Add to your Claude Code settings (`~/.config/claude-code/config.json`):
   "mcpServers": {
     "laravel-ai": {
       "command": "node",
-      "args": ["/Users/pujan/Developer/Laravel/Ai/index.js"]
+      "args": ["path/to/laravel-ai/index.js"]
     }
   }
 }
@@ -43,7 +44,7 @@ If your documentation is in a different location:
   "mcpServers": {
     "laravel-ai": {
       "command": "node",
-      "args": ["/Users/pujan/Developer/Laravel/Ai/index.js"],
+      "args": ["path/to/laravel-ai/index.js"],
       "env": {
         "DOCS_PATH": "/path/to/your/docs"
       }
@@ -68,7 +69,7 @@ If your documentation is in a different location:
 ## 📁 Documentation Structure
 
 ```
-/Users/pujan/Developer/Laravel/Ai/
+laravel-ai/
 ├── docs/                          # Documentation folder
 │   ├── ai/
 │   │   ├── quick-reference.md    # All coding rules
@@ -155,6 +156,5 @@ npm start
 
 ---
 
-**Location:** `/Users/pujan/Developer/Laravel/Ai`
 **Version:** 1.0.0
 **Last Updated:** 2026-02-23
