@@ -1,0 +1,23 @@
+{
+  "name": "laravel-ai-docs-server",
+  "version": "1.0.0",
+  "description": "MCP server for Laravel AI documentation",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": [
+    "mcp",
+    "laravel",
+    "ai",
+    "documentation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^4.3.6"
+  }
+}
