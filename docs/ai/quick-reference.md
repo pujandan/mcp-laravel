@@ -186,14 +186,39 @@ public function store(FormRequest $request): JsonResponse
 
 ### 3.2 Service Interface Pattern
 
+**CRITICAL: ALL parameters must be explicit, NO array $data or array $filters!**
+
 ```php
-// ✅ CORRECT - Interface with all CRUD methods
+// ✅ CORRECT - ALL parameters are explicit
 interface UserInterface
 {
-    public function paginate(array $filters, PaginationData $pagination): LengthAwarePaginator;
+    // Paginate: ALL filters as explicit parameters
+    public function paginate(
+        PaginationData $pagination,
+        ?string $search = null,
+        ?string $status = null,
+        ?string $department = null
+    ): LengthAwarePaginator;
+
     public function find(string $id): User;
-    public function create(array $data): User;
-    public function update(string $id, array $data): User;
+
+    // Create: ALL fields as explicit parameters (NO array $data)
+    public function create(
+        string $name,
+        string $email,
+        ?string $phone = null,
+        ?string $department = null
+    ): User;
+
+    // Update: ALL fields as explicit parameters (NO array $data)
+    public function update(
+        string $id,
+        ?string $name = null,
+        ?string $email = null,
+        ?string $phone = null,
+        ?string $department = null
+    ): User;
+
     public function delete(string $id): User;
 }
 
@@ -209,19 +234,56 @@ class UserService implements UserInterface
 ### 3.3 Write vs Read Methods
 
 ```php
-// ✅ WRITE method - With requireTransaction()
-public function create(array $data): User
-{
+// ✅ WRITE method - With requireTransaction(), ALL parameters explicit
+public function create(
+    string $name,
+    string $email,
+    ?string $phone = null,
+    ?string $department = null
+): User {
     $this->requireTransaction();  // Required at start
 
-    // Business logic...
-    return User::create($data);
+    // Business logic: Validate uniqueness
+    $existing = User::where('email', $email)->first();
+    if ($existing) {
+        throw new AppException('Email already exists', 422);
+    }
+
+    // Build data with ALL explicit parameters
+    $createData = [
+        'name' => $name,
+        'email' => $email,
+        'phone' => $phone,
+        'department' => $department,
+    ];
+
+    // Remove null values
+    $createData = array_filter($createData, fn($v) => $v !== null);
+
+    return User::create($createData);
 }
 
-// ✅ READ method - No requireTransaction()
-public function paginate(array $filters, PaginationData $pagination): LengthAwarePaginator
-{
+// ✅ READ method - No requireTransaction(), ALL filters explicit
+public function paginate(
+    PaginationData $pagination,
+    ?string $search = null,
+    ?string $status = null,
+    ?string $department = null
+): LengthAwarePaginator {
     $query = User::query();
+
+    if ($search !== null) {
+        $query->where('name', 'like', "%{$search}%");
+    }
+
+    if ($status !== null) {
+        $query->where('status', $status);
+    }
+
+    if ($department !== null) {
+        $query->where('department', $department);
+    }
+
     return AppQuery::paginate($query, $pagination);
 }
 ```
@@ -229,22 +291,42 @@ public function paginate(array $filters, PaginationData $pagination): LengthAwar
 ### 3.4 Business Logic in Service
 
 ```php
-// ✅ CORRECT - Business logic in service
-public function create(array $data): User
-{
+// ✅ CORRECT - ALL fields as explicit parameters
+public function create(
+    string $name,
+    string $email,
+    ?string $phone = null,
+    ?string $department = null
+): User {
     $this->requireTransaction();
 
-    // Business rule: Check uniqueness
-    $existing = User::where('email', $data['email'])->first();
+    // Business rule: Check uniqueness using explicit parameter
+    $existing = User::where('email', $email)->first();
     if ($existing) {
         throw new AppException('Email already exists', 422);
     }
 
-    // Business rule: Set defaults
-    $data['status'] = UserStatus::ACTIVE;
+    // Build data with ALL explicit parameters
+    $createData = [
+        'name' => $name,
+        'email' => $email,
+        'phone' => $phone,
+        'department' => $department,
+        'status' => UserStatus::ACTIVE,
+    ];
 
-    // Create model
-    return User::create($data);
+    // Remove null values for optional fields
+    $createData = array_filter($createData, fn($v) => $v !== null);
+
+    return User::create($createData);
+}
+
+// ❌ WRONG - Using array $data parameter
+public function create(string $name, string $email, array $data = []): User
+{
+    // Missing explicit parameters for phone, department, etc.
+    $createData = array_merge(['name' => $name, 'email' => $email], $data);
+    return User::create($createData);
 }
 
 // ❌ WRONG - Business logic in controller
@@ -1312,5 +1394,5 @@ All failures are automatically logged to `json-daily` channel:
 
 ---
 
-**Last Updated:** 2026-02-23
+**Last Updated:** 2026-02-24
 **Version:** 2.0 (Generic/Universal)

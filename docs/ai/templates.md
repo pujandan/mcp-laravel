@@ -50,9 +50,13 @@ class {Entity}Controller extends Controller
 
     public function index({Entity}Request $request): JsonResponse
     {
+        $filters = $request->input('filter', []);
+
         $items = $this->service->paginate(
-            filters: $request->input('filter', []),
-            pagination: $this->pagination($request)
+            pagination: $this->pagination($request),
+            search: $filters['search'] ?? null,
+            status: $filters['status'] ?? null,
+            // Add all filter parameters as explicit, not ...$additionalFilters
         );
 
         return AppResponse::success(
@@ -71,7 +75,16 @@ class {Entity}Controller extends Controller
     public function store({Entity}FormRequest $request): JsonResponse
     {
         return DB::transaction(function () use ($request) {
-            $item = $this->service->create($request->validated());
+            $validated = $request->validated();
+
+            // Call service with ALL explicit parameters
+            $item = $this->service->create(
+                name: $validated['name'],
+                email: $validated['email'],
+                status: $validated['status'] ?? null,
+                otherField: $validated['other_field'] ?? null,
+                // Add ALL fields as explicit parameters, NO array merge
+            );
 
             return AppResponse::success(
                 {Entity}Resource::make($item),
@@ -107,7 +120,17 @@ class {Entity}Controller extends Controller
     public function update({Entity}FormRequest $request, string $id): JsonResponse
     {
         return DB::transaction(function () use ($request, $id) {
-            $item = $this->service->update($id, $request->validated());
+            $validated = $request->validated();
+
+            // Call service with ALL explicit parameters
+            $item = $this->service->update(
+                id: $id,
+                name: $validated['name'] ?? null,
+                email: $validated['email'] ?? null,
+                status: $validated['status'] ?? null,
+                otherField: $validated['other_field'] ?? null,
+                // Add ALL fields as explicit parameters, NO array merge
+            );
 
             return AppResponse::success(
                 {Entity}Resource::make($item),
@@ -229,11 +252,20 @@ interface {Entity}Interface
     /**
      * Get paginated list with filters.
      *
-     * @param array $filters
+     * ALL filters must be explicit parameters, NO array $filters
+     *
      * @param PaginationData $pagination
+     * @param string|null $search
+     * @param string|null $status
+     * @param string|null $otherField Add all filter fields explicitly
      * @return LengthAwarePaginator
      */
-    public function paginate(array $filters, PaginationData $pagination): LengthAwarePaginator;
+    public function paginate(
+        PaginationData $pagination,
+        ?string $search = null,
+        ?string $status = null,
+        ?string $otherField = null
+    ): LengthAwarePaginator;
 
     /**
      * Find by ID or throw 404.
@@ -246,19 +278,40 @@ interface {Entity}Interface
     /**
      * Create new record.
      *
-     * @param array $data
+     * ALL required fields must be explicit parameters, NO array $data for main fields
+     *
+     * @param string $name Required field
+     * @param string $email Required field
+     * @param string|null $status Optional field (add ALL fields as parameters)
+     * @param string|null $otherField Optional field
      * @return {Entity}
      */
-    public function create(array $data): {Entity};
+    public function create(
+        string $name,
+        string $email,
+        ?string $status = null,
+        ?string $otherField = null
+    ): {Entity};
 
     /**
      * Update existing record.
      *
+     * ALL updatable fields must be explicit parameters, NO array $data for main fields
+     *
      * @param string $id
-     * @param array $data
+     * @param string|null $name Optional field (add ALL fields as parameters)
+     * @param string|null $email Optional field
+     * @param string|null $status Optional field
+     * @param string|null $otherField Optional field
      * @return {Entity}
      */
-    public function update(string $id, array $data): {Entity};
+    public function update(
+        string $id,
+        ?string $name = null,
+        ?string $email = null,
+        ?string $status = null,
+        ?string $otherField = null
+    ): {Entity};
 
     /**
      * Delete record.
@@ -295,17 +348,25 @@ class {Entity}Service implements {Entity}Interface
     /**
      * {@inheritdoc}
      */
-    public function paginate(array $filters, PaginationData $pagination): LengthAwarePaginator
-    {
+    public function paginate(
+        PaginationData $pagination,
+        ?string $search = null,
+        ?string $status = null,
+        ?string $otherField = null
+    ): LengthAwarePaginator {
         $query = {Entity}::query();
 
-        // Apply filters
-        if (!empty($filters['search'])) {
-            $query->where('name', 'like', "%{$filters['search']}%");
+        // Apply filters using explicit parameters
+        if ($search !== null) {
+            $query->where('name', 'like', "%{$search}%");
         }
 
-        if (!empty($filters['status'])) {
-            $query->where('status', $filters['status']);
+        if ($status !== null) {
+            $query->where('status', $status);
+        }
+
+        if ($otherField !== null) {
+            $query->where('other_field', $otherField);
         }
 
         return AppQuery::paginate($query, $pagination);
@@ -322,21 +383,33 @@ class {Entity}Service implements {Entity}Interface
     /**
      * {@inheritdoc}
      */
-    public function create(array $data): {Entity}
-    {
+    public function create(
+        string $name,
+        string $email,
+        ?string $status = null,
+        ?string $otherField = null
+    ): {Entity} {
         $this->requireTransaction();
 
-        // Business logic: Validate uniqueness
-        $existing = {Entity}::where('unique_field', $data['unique_field'])->first();
+        // Business logic: Validate uniqueness using explicit params
+        $existing = {Entity}::where('email', $email)->first();
         if ($existing) {
-            throw new AppException('Record already exists', 422);
+            throw new AppException('Email already exists', 422);
         }
 
-        // Business logic: Set default values
-        $data['status'] = '{DefaultValue}';
+        // Build create data with ALL explicit parameters
+        $createData = [
+            'name' => $name,
+            'email' => $email,
+            'status' => $status ?? '{DefaultValue}',
+            'other_field' => $otherField,
+        ];
+
+        // Remove null values for optional fields
+        $createData = array_filter($createData, fn($value) => $value !== null);
 
         // Create model
-        $entity = {Entity}::create($data);
+        $entity = {Entity}::create($createData);
 
         return $entity->fresh();
     }
@@ -344,16 +417,51 @@ class {Entity}Service implements {Entity}Interface
     /**
      * {@inheritdoc}
      */
-    public function update(string $id, array $data): {Entity}
-    {
+    public function update(
+        string $id,
+        ?string $name = null,
+        ?string $email = null,
+        ?string $status = null,
+        ?string $otherField = null
+    ): {Entity} {
         $this->requireTransaction();
 
         $entity = $this->find($id);
 
-        // Business logic: Prevent immutable field updates
-        unset($data['immutable_field']);
+        // Build update data from ALL explicit parameters
+        $updateData = [];
 
-        $entity->update($data);
+        if ($name !== null) {
+            $updateData['name'] = $name;
+        }
+
+        if ($email !== null) {
+            // Business logic: Validate uniqueness if email is being updated
+            $existing = {Entity}::where('email', $email)
+                ->where('id', '!=', $id)
+                ->first();
+            if ($existing) {
+                throw new AppException('Email already exists', 422);
+            }
+            $updateData['email'] = $email;
+        }
+
+        if ($status !== null) {
+            $updateData['status'] = $status;
+        }
+
+        if ($otherField !== null) {
+            $updateData['other_field'] = $otherField;
+        }
+
+        // Business logic: Prevent immutable field updates
+        unset($updateData['immutable_field']);
+
+        if (empty($updateData)) {
+            throw new AppException('No data to update', 422);
+        }
+
+        $entity->update($updateData);
 
         return $entity->fresh();
     }
@@ -780,19 +888,24 @@ return new class extends Migration
 
 **Business Logic Examples:**
 ```php
-// In ProductService::create()
+// In ProductService::create(string $sku, string $name, float $price, ?string $status = null)
 $this->requireTransaction();
 
-// Validate SKU uniqueness
-$existing = Product::where('sku', $data['sku'])->first();
+// Validate SKU uniqueness using explicit parameter
+$existing = Product::where('sku', $sku)->first();
 if ($existing) {
     throw new AppException('SKU already exists', 422);
 }
 
-// Set default status
-$data['status'] = ProductStatus::DRAFT;
+// Build create data with ALL explicit parameters
+$createData = [
+    'sku' => $sku,
+    'name' => $name,
+    'price' => $price,
+    'status' => $status ?? ProductStatus::DRAFT,
+];
 
-return Product::create($data);
+return Product::create($createData);
 ```
 
 ### Example 2: HR - Employee
@@ -806,19 +919,25 @@ return Product::create($data);
 
 **Business Logic Examples:**
 ```php
-// In EmployeeService::create()
+// In EmployeeService::create(string $employeeId, string $name, string $email, ?string $department = null)
 $this->requireTransaction();
 
-// Validate employee ID uniqueness
-$existing = Employee::where('employee_id', $data['employee_id'])->first();
+// Validate employee ID uniqueness using explicit parameter
+$existing = Employee::where('employee_id', $employeeId)->first();
 if ($existing) {
     throw new AppException('Employee ID already exists', 422);
 }
 
-// Set default status
-$data['employment_status'] = EmploymentStatus::ACTIVE;
+// Build create data with ALL explicit parameters
+$createData = [
+    'employee_id' => $employeeId,
+    'name' => $name,
+    'email' => $email,
+    'department' => $department,
+    'employment_status' => EmploymentStatus::ACTIVE,
+];
 
-return Employee::create($data);
+return Employee::create($createData);
 ```
 
 ### Example 3: Common - User
@@ -832,22 +951,28 @@ return Employee::create($data);
 
 **Business Logic Examples:**
 ```php
-// In UserService::create()
+// In UserService::create(string $name, string $email, string $password, ?string $phone = null)
 $this->requireTransaction();
 
-// Validate email uniqueness
-$existing = User::where('email', $data['email'])->first();
+// Validate email uniqueness using explicit parameter
+$existing = User::where('email', $email)->first();
 if ($existing) {
     throw new AppException('Email already exists', 422);
 }
 
-// Hash password
-$data['password'] = bcrypt($data['password']);
+// Hash password from explicit parameter
+$hashedPassword = bcrypt($password);
 
-// Set default status
-$data['status'] = UserStatus::ACTIVE;
+// Build create data with ALL explicit parameters
+$createData = [
+    'name' => $name,
+    'email' => $email,
+    'password' => $hashedPassword,
+    'phone' => $phone,
+    'status' => UserStatus::ACTIVE,
+];
 
-return User::create($data);
+return User::create($createData);
 ```
 
 ---
@@ -872,5 +997,5 @@ return User::create($data);
 
 ---
 
-**Last Updated:** 2026-02-23
-**Version:** 2.0 (Generic/Universal)
+**Last Updated:** 2026-02-24
+**Version:** 4.0 (ALL Explicit Parameters - NO Array $data)
